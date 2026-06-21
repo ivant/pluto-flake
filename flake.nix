@@ -17,7 +17,20 @@
         mtjulia = pkgs.writeShellApplication {
           name = "mtjulia";
           text = ''
-            ${julia}/bin/julia -t 12,4 --gcthreads=8,1 -O3 --heap-size-hint=32GB -C apple-latest "$@"
+            CPUS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+            WORKER=$(( CPUS * 3 / 4 ))
+            INTERACTIVE=$(( CPUS - WORKER ))
+            GC=$(( CPUS / 2 ))
+            [[ "$WORKER" -lt 1 ]] && WORKER=1
+            [[ "$INTERACTIVE" -lt 1 ]] && INTERACTIVE=1
+            [[ "$GC" -lt 1 ]] && GC=1
+            exec ${julia}/bin/julia \
+              -t "$WORKER,$INTERACTIVE" \
+              --gcthreads="$GC,1" \
+              -O3 \
+              --heap-size-hint=75% \
+              ${pkgs.lib.optionalString pkgs.stdenv.isDarwin "-C apple-latest"} \
+              "$@"
           '';
         };
 
@@ -49,7 +62,6 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             julia
-            cmdstan
           ];
 
           shellHook = ''
